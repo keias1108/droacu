@@ -19,16 +19,18 @@ def calculate_price(width, height):
 @app.route('/kakao', methods=['POST'])
 def kakao_chatbot():
     try:
+        # 요청 JSON 데이터 확인 (디버깅용)
         data = request.get_json(force=True)
+        print("Received data:", data)
 
-        # 1. `utterance` 값이 있는지 확인
+        # `utterance` 값이 있는 경우
         user_message = data.get('action', {}).get('params', {}).get('utterance', '')
 
-        # 2. 또는 `width`와 `height` 개별 파라미터 확인
+        # `width`, `height` 개별 값이 있는 경우
         width = data.get('action', {}).get('params', {}).get('width', None)
         height = data.get('action', {}).get('params', {}).get('height', None)
 
-        # 3. width & height가 개별적으로 넘어오면 이를 사용
+        # width와 height가 개별적으로 넘어오면 이를 사용
         if width and height:
             width, height = int(width), int(height)
         elif 'x' in user_message:
