@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 import os
+import re
 
 app = Flask(__name__)
 
@@ -20,14 +21,17 @@ def calculate_price(width, height):
 def kakao_chatbot():
     try:
         data = request.get_json(force=True)
-        print("Received data:", data)  # 요청 데이터 확인용 로그
+        print("Received data:", data)
 
-        # `utterance` 값 확인
+        # `utterance` 값 가져오기
         user_message = data.get('userRequest', {}).get('utterance', '')
 
         # `width`, `height` 개별 값 확인
         width = data.get('action', {}).get('params', {}).get('width', None)
         height = data.get('action', {}).get('params', {}).get('height', None)
+
+        # 특수문자를 일반적인 'x'로 변환
+        user_message = re.sub(r'[*×X]', 'x', user_message)  # 모든 변형된 문자 'x'로 변경
 
         # `utterance`에서 값이 있으면 분리
         if not width or not height:
