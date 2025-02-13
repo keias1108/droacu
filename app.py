@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-import math
+import os
 
 app = Flask(__name__)
 
@@ -7,60 +7,50 @@ def calculate_price(width, height):
     base_price = 4180  # 기본 가격
 
     # 가로 단계 계산
-    # 기준 데이터: 60, 95, 185, 275, 370, 460
     width_thresholds = [60, 95, 185, 275, 370, 460]
-    width_count = 0
-    for threshold in width_thresholds:
-        if width >= threshold:
-            width_count += 1
-        else:
-            break
-    # 가로 단계: 충족한 기준 개수에서 1을 뺀 값 (최소 단계 0)
-    width_step = width_count - 1 if width_count > 0 else 0
+    width_step = sum(1 for w in width_thresholds if width >= w) - 1
 
     # 세로 단계 계산
-    # 기준 데이터: 40, 55, 105, 155, 210, 260
     height_thresholds = [40, 55, 105, 155, 210, 260]
-    height_count = 0
-    for threshold in height_thresholds:
-        if height >= threshold:
-            height_count += 1
-        else:
-            break
-    height_step = height_count - 1 if height_count > 0 else 0
+    height_step = sum(1 for h in height_thresholds if height >= h) - 1
 
     # 260mm 초과 시 50mm 단위로 추가 단계 계산 (완료된 구간만)
-    if height > height_thresholds[-1]:
-        additional_steps = (height - height_thresholds[-1]) // 50
-        height_step += additional_steps
+    if height > 260:
+        height_step += (height - 260) // 50
 
     # 최종 가격 계산 (각 단계에 1을 더하여 곱함)
-    final_price = base_price * (width_step + 1) * (height_step + 1)
-    return final_price
+    return base_price * (width_step + 1) * (height_step + 1)
 
 @app.route('/kakao', methods=['POST'])
 def kakao_chatbot():
     """
-    카카오톡 챗봇 플랫폼에서 전송되는 JSON 구조는
-    'userRequest' 내부의 'utterance' 키에 사용자가 입력한 메시지를 포함합니다.
-    메시지는 "가로x세로" 형식(공백 제거된 문자열)이어야 합니다.
+    카카오 챗봇에서 보내는 JSON에서 'utterance' 값을 추출하여 가격을 계산하고 응답합니다.
     """
     try:
+        # JSON 데이터 가져오기
         data = request.get_json(force=True)
-        user_message = data['userRequest']['utterance']
-        # 공백 제거 후 소문자 변환
-        user_message = user_message.replace(" ", "").lower()
+
+        # utterance 값 가져오기 (action -> params -> utterance)
+        user_message = data.get('action', {}).get('params', {}).get('utterance', '').replace(" ", "").lower()
+
+        # 유효한 형식인지 확인
         if 'x' not in user_message:
             raise ValueError("형식 오류")
+
+        # 가로, 세로 값 분리
         width_str, height_str = user_message.split('x')
         width = int(width_str)
         height = int(height_str)
 
+        # 가격 계산
         price = calculate_price(width, height)
-        response_text = f"입력하신 크기 {width}mm x {height}mm 의 가격은 {price:,}원 입니다."
-    except Exception:
-        response_text = "입력 형식이 올바르지 않습니다. (예: 500x500)"
+        response_text = f"{width}mm x {height}mm 가격은 {price:,}원 입니다."
 
+    except Exception as e:
+        response_text = "입력 형식이 올바르지 않습니다. (예: 500x500)"
+        print(f"오류 발생: {e}")
+
+    # 카카오 챗봇 응답 포맷
     response = {
         "version": "2.0",
         "template": {
@@ -76,5 +66,5 @@ def kakao_chatbot():
     return jsonify(response)
 
 if __name__ == '__main__':
-    # 서버 실행: 호스트는 외부 접근 가능하도록 0.0.0.0, 포트는 5000 사용
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
