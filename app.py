@@ -1,9 +1,10 @@
 from flask import Flask, request, jsonify
+import re
 
 app = Flask(__name__)
 
-# 종이별 가격 정보
-paper_prices = {
+# 종이별 기본 가격 설정
+PAPER_PRICES = {
     "누브지": 4180,
     "휘라레린넨": 3850,
     "스타드림": 4730,
@@ -15,43 +16,63 @@ paper_prices = {
 }
 
 # 가격 계산 함수
-def calculate_price(width, height, paper_type):
-    base_price = paper_prices.get(paper_type, 4180)  # 기본값 누브지
+def calculate_price(width, height, base_price):
     width_thresholds = [60, 95, 185, 275, 370, 460]
     height_thresholds = [40, 55, 105, 155, 210, 260, 310, 360, 410, 460, 510]
 
-    width_step = sum(1 for w in width_thresholds if width >= w) - 1
-    height_step = sum(1 for h in height_thresholds if height >= h) - 1
+    width_step = sum(1 for w in width_thresholds if width >= w)
+    height_step = sum(1 for h in height_thresholds if height >= h)
 
-    if height > 510:
-        height_step += (height - 510) // 50 + 1
-
-    final_price = base_price * (width_step + 1) * (height_step + 1)
-    return final_price
+    price = base_price * (width_step + 1) * (height_step + 1)
+    return price
 
 @app.route('/kakao', methods=['POST'])
 def kakao_chatbot():
-    data = request.get_json(force=True)
-    user_message = data['userRequest']['utterance'].replace(" ", "").lower()
-    paper_type = data['action'].get('clientExtra', {}).get('paper_type')
-
-    if not paper_type:
-        return jsonify({
-            "version": "2.0",
-            "template": {
-                "outputs": [{"simpleText": {"text": "📢 먼저 종이를 선택해주세요!"}}]
-            }
-        })
-
     try:
-        width, height = map(int, user_message.split('x'))
-        if width < 60 or height < 40 or width > 530 or height > 530:
-            response_text = "⚠ 해당 사이즈는 제작이 가능하지 않습니다."
-        else:
-            price = calculate_price(width, height, paper_type)
-            response_text = f"✅ {paper_type} {width}mm x {height}mm 가격은 {price:,}원 입니다."
-    except ValueError:
-        response_text = "⚠ 올바른 형식이 아닙니다. (예: 500x500)"
+        data = request.get_json(force=True)
+
+        # `clientExtra` 또는 `extra`에서 `paper_type` 값 가져오기
+        paper_type = data.get('action', {}).get('clientExtra', {}).get('paper_type', '') or \
+                     data.get('action', {}).get('extra', {}).get('paper_type', '')
+
+        # 종이 재질이 선택되지 않은 경우
+        if not paper_type or paper_type not in PAPER_PRICES:
+            return jsonify({
+                "version": "2.0",
+                "template": {
+                    "outputs": [{"simpleText": {"text": "❗️ 재질이 선택되지 않았습니다. 원하는 종이를 선택해주세요."}}]
+                }
+            })
+
+        # 사용자가 입력한 사이즈 (300x300 또는 300*300 등의 형식)
+        user_message = data.get('userRequest', {}).get('utterance', '').replace(" ", "").lower()
+
+        # 정규식으로 사이즈 추출 (x, X, ×, * 모두 허용)
+        match = re.match(r"(\d{2,4})[xX×*](\d{2,4})", user_message)
+        if not match:
+            raise ValueError("형식 오류")
+
+        width, height = int(match.group(1)), int(match.group(2))
+
+        # 제한 범위 검사 (제작 가능 여부 체크)
+        if width < 60 or width > 530 or height < 40 or height > 530:
+            return jsonify({
+                "version": "2.0",
+                "template": {
+                    "outputs": [{"simpleText": {"text": "❌ 해당 사이즈는 제작이 불가능합니다. (가능 범위: 60~530mm x 40~530mm)"}}]
+                }
+            })
+
+        # 종이별 가격 가져오기
+        base_price = PAPER_PRICES[paper_type]
+
+        # 최종 가격 계산
+        price = calculate_price(width, height, base_price)
+        response_text = f"✅ {paper_type} {width}mm x {height}mm 가격은 {price:,}원 입니다."
+
+    except Exception as e:
+        print(f"오류 발생: {e}")
+        response_text = "⚠️ 입력 형식이 올바르지 않습니다. (예: 500x500)"
 
     return jsonify({
         "version": "2.0",
