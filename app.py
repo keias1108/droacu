@@ -21,7 +21,7 @@ def kakao_chatbot():
     try:
         data = request.get_json(force=True)
 
-        # 1. `action['params']['utterance']`에서 데이터 추출
+        # 1. `utterance` 값이 있는지 확인
         user_message = data.get('action', {}).get('params', {}).get('utterance', '')
 
         # 2. 또는 `width`와 `height` 개별 파라미터 확인
