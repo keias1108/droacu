@@ -19,28 +19,26 @@ def calculate_price(width, height):
 @app.route('/kakao', methods=['POST'])
 def kakao_chatbot():
     try:
-        # 요청 JSON 데이터 확인 (디버깅용)
         data = request.get_json(force=True)
-        print("Received data:", data)
+        print("Received data:", data)  # 요청 데이터 확인용 로그
 
-        # `utterance` 값이 있는 경우
-        user_message = data.get('action', {}).get('params', {}).get('utterance', '')
+        # `utterance` 값 확인
+        user_message = data.get('userRequest', {}).get('utterance', '')
 
-        # `width`, `height` 개별 값이 있는 경우
+        # `width`, `height` 개별 값 확인
         width = data.get('action', {}).get('params', {}).get('width', None)
         height = data.get('action', {}).get('params', {}).get('height', None)
 
-        # width와 height가 개별적으로 넘어오면 이를 사용
-        if width and height:
-            width, height = int(width), int(height)
-        elif 'x' in user_message:
-            width_str, height_str = user_message.replace(" ", "").lower().split('x')
-            width, height = int(width_str), int(height_str)
-        else:
-            raise ValueError("형식 오류")
+        # `utterance`에서 값이 있으면 분리
+        if not width or not height:
+            if 'x' in user_message:
+                width_str, height_str = user_message.replace(" ", "").lower().split('x')
+                width, height = int(width_str), int(height_str)
+            else:
+                raise ValueError("형식 오류")
 
         # 가격 계산
-        price = calculate_price(width, height)
+        price = calculate_price(int(width), int(height))
         response_text = f"{width}mm x {height}mm 가격은 {price:,}원 입니다."
 
     except Exception as e:
