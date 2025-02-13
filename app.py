@@ -1,9 +1,8 @@
 from flask import Flask, request, jsonify
-import os
 
 app = Flask(__name__)
 
-# 종이 재질별 가격
+# 종이별 가격 정보
 paper_prices = {
     "누브지": 4180,
     "휘라레린넨": 3850,
@@ -15,78 +14,51 @@ paper_prices = {
     "몽블랑백색": 4290
 }
 
+# 가격 계산 함수
 def calculate_price(width, height, paper_type):
-    # 기본 가격 확인 (선택된 종이에 따라)
-    base_price = paper_prices.get(paper_type, None)
-
-    if base_price is None:
-        return None  # 재질 정보 없음
-
+    base_price = paper_prices.get(paper_type, 4180)  # 기본값 누브지
     width_thresholds = [60, 95, 185, 275, 370, 460]
     height_thresholds = [40, 55, 105, 155, 210, 260, 310, 360, 410, 460, 510]
 
-    width_step = sum(1 for w in width_thresholds if width >= w)
-    height_step = sum(1 for h in height_thresholds if height >= h)
+    width_step = sum(1 for w in width_thresholds if width >= w) - 1
+    height_step = sum(1 for h in height_thresholds if height >= h) - 1
 
-    # 최종 가격 계산
-    price = base_price * (width_step + 1) * (height_step + 1)
-    return price
+    if height > 510:
+        height_step += (height - 510) // 50 + 1
+
+    final_price = base_price * (width_step + 1) * (height_step + 1)
+    return final_price
 
 @app.route('/kakao', methods=['POST'])
 def kakao_chatbot():
+    data = request.get_json(force=True)
+    user_message = data['userRequest']['utterance'].replace(" ", "").lower()
+    paper_type = data['action'].get('clientExtra', {}).get('paper_type')
+
+    if not paper_type:
+        return jsonify({
+            "version": "2.0",
+            "template": {
+                "outputs": [{"simpleText": {"text": "📢 먼저 종이를 선택해주세요!"}}]
+            }
+        })
+
     try:
-        data = request.get_json(force=True)
-
-        # 재질 정보 확인 (컨텍스트에서 가져옴)
-        paper_type = data.get("contexts", [{}])[0].get("params", {}).get("paper_type", None)
-
-        if not paper_type:
-            return jsonify({
-                "version": "2.0",
-                "template": {"outputs": [{"simpleText": {"text": "📌 먼저 종이 재질을 선택해주세요!"}}]}
-            })
-
-        # 사이즈 입력값 확인
-        user_message = data.get('userRequest', {}).get('utterance', '').replace(" ", "").lower()
-
-        if 'x' not in user_message:
-            return jsonify({
-                "version": "2.0",
-                "template": {"outputs": [{"simpleText": {"text": "⚠️ 올바른 형식이 아닙니다. (예: 500x500)"}}]}
-            })
-
-        width_str, height_str = user_message.split('x')
-        width = int(width_str)
-        height = int(height_str)
-
-        # 제한 범위 확인
+        width, height = map(int, user_message.split('x'))
         if width < 60 or height < 40 or width > 530 or height > 530:
-            return jsonify({
-                "version": "2.0",
-                "template": {"outputs": [{"simpleText": {"text": "⚠️ 해당 사이즈는 제작이 불가능합니다."}}]}
-            })
+            response_text = "⚠ 해당 사이즈는 제작이 가능하지 않습니다."
+        else:
+            price = calculate_price(width, height, paper_type)
+            response_text = f"✅ {paper_type} {width}mm x {height}mm 가격은 {price:,}원 입니다."
+    except ValueError:
+        response_text = "⚠ 올바른 형식이 아닙니다. (예: 500x500)"
 
-        # 가격 계산
-        price = calculate_price(width, height, paper_type)
-        if price is None:
-            return jsonify({
-                "version": "2.0",
-                "template": {"outputs": [{"simpleText": {"text": "📌 재질을 먼저 선택해주세요!"}}]}
-            })
-
-        # 최종 응답
-        response_text = f"✅ {paper_type} {width}mm x {height}mm 가격은 {price:,}원 입니다."
-        return jsonify({
-            "version": "2.0",
-            "template": {"outputs": [{"simpleText": {"text": response_text}}]}
-        })
-
-    except Exception as e:
-        return jsonify({
-            "version": "2.0",
-            "template": {"outputs": [{"simpleText": {"text": "⚠️ 오류가 발생했습니다. 다시 시도해주세요."}}]}
-        })
+    return jsonify({
+        "version": "2.0",
+        "template": {
+            "outputs": [{"simpleText": {"text": response_text}}]
+        }
+    })
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=8080, debug=True)
