@@ -30,32 +30,31 @@ def calculate_price(width, height, base_price):
 def kakao_chatbot():
     try:
         data = request.get_json(force=True)
-        print("Received Data:", data)  # 디버깅용 데이터 출력
 
-        # ✅ `clientExtra` 또는 `extra`에서 `paper_type` 값 가져오기
+        # `clientExtra` 또는 `extra`에서 `paper_type` 값 가져오기
         paper_type = data.get('action', {}).get('clientExtra', {}).get('paper_type', '') or \
                      data.get('action', {}).get('extra', {}).get('paper_type', '')
 
-        # ✅ 종이 재질이 선택되지 않았으면 "재질을 먼저 선택해주세요" 메시지 출력
+        # 종이 재질이 선택되지 않은 경우
         if not paper_type or paper_type not in PAPER_PRICES:
             return jsonify({
                 "version": "2.0",
                 "template": {
-                    "outputs": [{"simpleText": {"text": "❗️ 먼저 종이를 선택해주세요!"}}]
+                    "outputs": [{"simpleText": {"text": "❗️ 재질이 선택되지 않았습니다. 원하는 종이를 선택해주세요."}}]
                 }
             })
 
-        # ✅ 사용자가 입력한 사이즈 (300x300, 300*300 등의 형식)
+        # 사용자가 입력한 사이즈 (300x300 또는 300*300 등의 형식)
         user_message = data.get('userRequest', {}).get('utterance', '').replace(" ", "").lower()
 
-        # ✅ 정규식으로 사이즈 추출 (x, X, ×, * 모두 허용)
+        # 정규식으로 사이즈 추출 (x, X, ×, * 모두 허용)
         match = re.match(r"(\d{2,4})[xX×*](\d{2,4})", user_message)
         if not match:
             raise ValueError("형식 오류")
 
         width, height = int(match.group(1)), int(match.group(2))
 
-        # ✅ 제작 가능 범위 검사
+        # 제한 범위 검사 (제작 가능 여부 체크)
         if width < 60 or width > 530 or height < 40 or height > 530:
             return jsonify({
                 "version": "2.0",
@@ -64,10 +63,10 @@ def kakao_chatbot():
                 }
             })
 
-        # ✅ 종이별 가격 가져오기
+        # 종이별 가격 가져오기
         base_price = PAPER_PRICES[paper_type]
 
-        # ✅ 최종 가격 계산
+        # 최종 가격 계산
         price = calculate_price(width, height, base_price)
         response_text = f"✅ {paper_type} {width}mm x {height}mm 가격은 {price:,}원 입니다."
 
