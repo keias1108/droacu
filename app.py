@@ -30,12 +30,13 @@ def calculate_price(width, height, base_price):
 def kakao_chatbot():
     try:
         data = request.get_json(force=True)
+        print("Received Data:", data)  # 디버깅용 데이터 출력
 
-        # `clientExtra` 또는 `extra`에서 `paper_type` 값 가져오기
+        # ✅ `clientExtra` 또는 `extra`에서 `paper_type` 값 가져오기
         paper_type = data.get('action', {}).get('clientExtra', {}).get('paper_type', '') or \
                      data.get('action', {}).get('extra', {}).get('paper_type', '')
 
-        # ✅ 재질이 선택되지 않았으면 메시지 출력
+        # ✅ 종이 재질이 선택되지 않았으면 "재질을 먼저 선택해주세요" 메시지 출력
         if not paper_type or paper_type not in PAPER_PRICES:
             return jsonify({
                 "version": "2.0",
